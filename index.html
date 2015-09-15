@@ -80,15 +80,15 @@
 <span class="pl-en">listen</span>(sock);
 
 <span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
-nfd = <span class="pl-c1">accept</span>(sock);
+    nfd = <span class="pl-c1">accept</span>(sock);
 
-<span class="pl-k">switch</span> (<span class="pl-c1">fork</span>()) {
-<span class="pl-k">case</span> <span class="pl-c1">0</span>:   <span class="pl-c">/* child process */</span>
-    <span class="pl-c1">process_request</span>(nfd);
-    <span class="pl-k">break</span>;
-<span class="pl-k">default</span>:  <span class="pl-c">/* parent process */</span>
-    <span class="pl-k">break</span>;
-}
+    <span class="pl-k">switch</span> (<span class="pl-c1">fork</span>()) {
+    <span class="pl-k">case</span> <span class="pl-c1">0</span>:   <span class="pl-c">/* child process */</span>
+        <span class="pl-c1">process_request</span>(nfd);
+        <span class="pl-k">break</span>;
+    <span class="pl-k">default</span>:  <span class="pl-c">/* parent process */</span>
+        <span class="pl-k">break</span>;
+    }
 }</pre></div>
 
 <p>因为每个请求都需要申请一个线程/进程来处理，所以当并发非常高的时候此模型会因为线程/进程上下文切换（线程/进程调度）而导致性能急剧下降。另外频繁的创建和销毁线程/进程也会导致性能下降。
@@ -111,17 +111,17 @@ nfd = <span class="pl-c1">accept</span>(sock);
 <span class="pl-en">event_add</span>(sock);
 
 <span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
-list = <span class="pl-c1">event_wait</span>();
+    list = <span class="pl-c1">event_wait</span>();
 
-<span class="pl-c1">for_each</span>(list, fd) {
-    <span class="pl-k">if</span> (fd == sock) {
-        nfd = <span class="pl-c1">accept</span>(sock);
-        <span class="pl-c1">set_nonblocking</span>(nfd);
-        <span class="pl-c1">event_add</span>(nfd);
-} <span class="pl-k">else</span> {
-    <span class="pl-c1">Process</span>(fd);
-}
-}
+    <span class="pl-c1">for_each</span>(list, fd) {
+        <span class="pl-k">if</span> (fd == sock) {
+            nfd = <span class="pl-c1">accept</span>(sock);
+            <span class="pl-c1">set_nonblocking</span>(nfd);
+            <span class="pl-c1">event_add</span>(nfd);
+        } <span class="pl-k">else</span> {
+            <span class="pl-c1">process</span>(fd);
+        }
+    }
 }</pre></div>
 
 <p>使用事件通知模型的好处是：单进程单线程可以处理上万个请求，而且占用系统资源较少。但由于不同的操作系统，多路复用I/O的接口不尽相同，所以一般可以使用第三方的库来进行跨平台开发，比较有名的库有libevent、libev等。
