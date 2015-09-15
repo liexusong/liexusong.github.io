@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>服务器运行模型 by liexusong</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>服务器运行模型</h1>
+        <p>服务器运行模型</p>
+
+
+        <p class="view"><a href="https://github.com/liexusong">View My GitHub Profile</a></p>
+
+      </header>
+      <section>
+        <p>要编写出高性能的服务器程序就必须要设计好运行模型，现在比较有名的高性能服务器程序有Nginx、Redis、Memcached、Apache等等，他们的运行模型不尽相同。接下来介绍各种流行的服务器运行模型。</p>
+
+<h2>
+<a id="一单进程单线程阻塞式模型" class="anchor" href="#%E4%B8%80%E5%8D%95%E8%BF%9B%E7%A8%8B%E5%8D%95%E7%BA%BF%E7%A8%8B%E9%98%BB%E5%A1%9E%E5%BC%8F%E6%A8%A1%E5%9E%8B" aria-hidden="true"><span class="octicon octicon-link"></span></a>一，单进程单线程阻塞式模型</h2>
+
+<p>这种模型是最简单的模型，因为是最简单，所以性能也不太好。这种模型在一个周期只能处理一个请求，也就是说当服务器在处理某个请求时，其他请求必须等待当前请求完成才能被处理。模型图如下：
+ <img src="https://raw.githubusercontent.com/liexusong/liexusong.github.io/master/images/1.jpg" alt="">
+用伪代码表示如下：</p>
+
+<div class="highlight highlight-source-c"><pre>sock = socket();
+<span class="pl-en">bind</span>(sock);
+<span class="pl-en">listen</span>(sock);
+
+<span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
+    nfd = <span class="pl-c1">accept</span>(sock);
+    <span class="pl-c1">process_request</span>(nfd);
+}</pre></div>
+
+<p>由于这种模型性能不佳，所以市面上还没有服务器使用这种模型，此模型一般作为教学例子使用。</p>
+
+<h2>
+<a id="二单进程单线程非阻塞模型" class="anchor" href="#%E4%BA%8C%E5%8D%95%E8%BF%9B%E7%A8%8B%E5%8D%95%E7%BA%BF%E7%A8%8B%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B" aria-hidden="true"><span class="octicon octicon-link"></span></a>二，单进程单线程非阻塞模型</h2>
+
+<p>与单进程单线程阻塞模型不同的是，此模型把所有的套接字句柄（下文称为fd）设置为非阻塞，当读写fd时返回EWOULDBLOCK错误时说明此fd没有数据可读写，这时我们应该选择其他的fd来进行读写操作。
+当然使用这种模型需要维护一个fd的列表，处理的时候需要遍历列表中所有的fd，当操作返回EWOULDBLOCK时，选择下一个fd进行处理。模型图如下：
+ <img src="https://raw.githubusercontent.com/liexusong/liexusong.github.io/master/images/12.jpg" alt="">
+用伪代码表示如下：</p>
+
+<div class="highlight highlight-source-c"><pre>sock = socket();
+<span class="pl-en">set_nonblocking</span>(sock);  <span class="pl-c">// set fd to non-blocking</span>
+<span class="pl-en">bind</span>(sock);
+<span class="pl-en">listen</span>(sock);
+
+<span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
+    nfd = <span class="pl-c1">accept</span>(sock);
+    <span class="pl-c1">set_nonblocking</span>(nfd);    <span class="pl-c">// set fd to non-blocking</span>
+    <span class="pl-c1">add_list</span>(list, nfd);
+
+    <span class="pl-c1">for_each</span>(list, fd) {
+        <span class="pl-c1">process_request</span>(fd);
+    }
+}</pre></div>
+
+<p>当然，此模型要比第一种模型要好，因为此模型可以同时处理多个请求。但此模型每次周期都需要遍历所有的fd检查其是否可读写，所以性能也不太高效。</p>
+
+<h2>
+<a id="三多线程多进程模型" class="anchor" href="#%E4%B8%89%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%A4%9A%E8%BF%9B%E7%A8%8B%E6%A8%A1%E5%9E%8B" aria-hidden="true"><span class="octicon octicon-link"></span></a>三，多线程/多进程模型</h2>
+
+<p>多线程模型的原理是对于每个请求都申请一个线程/进程来处理，这样当某个请求被阻塞时，由于只会阻塞当前线程/进程，所以不会影响其他请求的处理。模型图如下：
+ <img src="https://raw.githubusercontent.com/liexusong/liexusong.github.io/master/images/3.jpg" alt="">
+用伪代码表示如下：</p>
+
+<div class="highlight highlight-source-c"><pre>sock = socket();
+<span class="pl-en">bind</span>(sock);
+<span class="pl-en">listen</span>(sock);
+
+<span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
+    nfd = <span class="pl-c1">accept</span>(sock);
+
+    <span class="pl-k">switch</span> (<span class="pl-c1">fork</span>()) {
+    <span class="pl-k">case</span> <span class="pl-c1">0</span>:   <span class="pl-c">/* child process */</span>
+        <span class="pl-c1">process_request</span>(nfd);
+        <span class="pl-k">break</span>;
+    <span class="pl-k">default</span>:  <span class="pl-c">/* parent process */</span>
+        <span class="pl-k">break</span>;
+    }
+}</pre></div>
+
+<p>因为每个请求都需要申请一个线程/进程来处理，所以当并发非常高的时候此模型会因为线程/进程上下文切换（线程/进程调度）而导致性能急剧下降。另外频繁的创建和销毁线程/进程也会导致性能下降。
+所以现代服务器程序也很少用这种模型，当然比较有名的HTTP服务器“Apache”是使用这种模型，但其使用线程池来解决频繁创建和销毁线程。</p>
+
+<h2>
+<a id="四事件通知模型" class="anchor" href="#%E5%9B%9B%E4%BA%8B%E4%BB%B6%E9%80%9A%E7%9F%A5%E6%A8%A1%E5%9E%8B" aria-hidden="true"><span class="octicon octicon-link"></span></a>四，事件通知模型</h2>
+
+<p>事件通知模型是现代服务器最常用的模型，他能解决上面所有模型的问题：可以处理十万级请求，而且不会像多线程模型那样占用太多的系统资源。
+事件通知模型的原理是：使用多路复用I/O来监听所有请求fd，当某些fd可读写时会通知系统有fd可以进行读写操作，此时系统就会调用注册的回调函数来处理这些fd。
+模型图如下：
+ <img src="https://raw.githubusercontent.com/liexusong/liexusong.github.io/master/images/4.jpg" alt="">
+用伪代码表示如下：</p>
+
+<div class="highlight highlight-source-c"><pre>sock = socket();
+<span class="pl-en">set_nonblocking</span>(sock);
+<span class="pl-en">bind</span>(sock);
+<span class="pl-en">listen</span>(sock);
+
+<span class="pl-en">event_add</span>(sock);
+
+<span class="pl-k">while</span> (<span class="pl-c1">1</span>) {
+    list = <span class="pl-c1">event_wait</span>();
+
+    <span class="pl-c1">for_each</span>(list, fd) {
+        <span class="pl-k">if</span> (fd == sock) {
+            nfd = <span class="pl-c1">accept</span>(sock);
+            <span class="pl-c1">set_nonblocking</span>(nfd);
+            <span class="pl-c1">event_add</span>(nfd);
+        } <span class="pl-k">else</span> {
+            <span class="pl-c1">process</span>(fd);
+        }
+    }
+}</pre></div>
+
+<p>使用事件通知模型的好处是：单进程单线程可以处理上万个请求，而且占用系统资源较少。但由于不同的操作系统，多路复用I/O的接口不尽相同，所以一般可以使用第三方的库来进行跨平台开发，比较有名的库有libevent、libev等。
+此模型在现代服务器程序中使用比较广泛，例如Nginx、Memcache、Redis等等。当然这些服务器除了使用事件通知模型之外还使用了多进程和多线程模型。</p>
+      </section>
+      <footer>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
